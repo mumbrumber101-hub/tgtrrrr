@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Reefs of Earth · Study Guide</title>
+<style>
+html{color-scheme:light}body{margin:0;background:#f6f1e7;color:#252b28;font:18px/1.6 Georgia,serif}main{max-width:36rem;margin:12vh auto;padding:2rem}h1{font-size:2rem;font-weight:normal;line-height:1.2}a{color:#006fa8;text-decoration:none}a:hover{text-decoration:underline}button{font:inherit;color:#fff;background:#284d43;border:0;border-radius:4px;padding:.5rem 1rem;cursor:pointer}button:disabled{opacity:.6;cursor:wait}.actions{display:flex;gap:1.3rem;align-items:center;flex-wrap:wrap}[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>The Reefs of Earth</h1>
+<p id="status" role="status" aria-live="polite">Opening the study guide at your selected entry…</p>
+<p class="actions"><button id="retry" type="button" hidden>Try again</button><a id="original" href="./index.html">Read the original guide</a></p>
+<noscript><p>JavaScript is needed to open a selected entry. The original guide is available above.</p></noscript>
+</main>
+<script>
+function repairReefsGuide(html) {
+  'use strict';
+  const additions = [
+    ['the-two-plots', 'The Two Plots'],
+    ['lost-haven-fraud', 'The Business of Lost Haven'],
+    ['childhood-violence', 'Violence and the Child’s Perspective']
+  ];
+  function replaceOnce(source, before, after, label) {
+    if (source.split(before).length !== 2) throw new Error('The guide has changed: ' + label + '.');
+    return source.replace(before, after);
+  }
+  for (const [id, title] of additions) {
+    const existing = html.match(new RegExp('<[^>]+\\bid=["\\\']' + id + '["\\\']', 'g')) || [];
+    if (existing.length > 1) throw new Error('The guide has duplicate destinations.');
+    if (existing.length === 1) continue;
+    const before = '<div class="info-card"><div class="info-card-header"><span class="info-card-icon">✦</span><span class="info-card-title">' + title + '</span>';
+    html = replaceOnce(html, before, before.replace('<div class="info-card">', '<div class="info-card" id="' + id + '">'), title);
+  }
+  const marker = '/* Reefs stable entry navigation v1 */';
+  if (!html.includes(marker)) {
+    html = replaceOnce(html,
+      "  function navigateTo(id, {historyMode = 'push', focus = true, scroll = true} = {}) {",
+      "  " + marker + "\n  let navigationSequence = 0;\n  function navigateTo(id, {historyMode = 'push', focus = true, scroll = true} = {}) {",
+      'navigation function');
+    html = replaceOnce(html,
+      '    if (!section) return false;\n    closeMenu();',
+      '    if (!section) return false;\n    const navigationTicket = ++navigationSequence;\n    closeMenu();',
+      'navigation sequence');
+    const before = "    if (scroll) requestAnimationFrame(() => {\n      const offset = $('.top-bar').getBoundingClientRect().height + 20;\n      const top = destination.getBoundingClientRect().top + window.scrollY - offset;\n      window.scrollTo({top: Math.max(0, top), behavior: 'instant'});\n    });";
+    const after = "    if (scroll) {\n      const alignDestination = () => requestAnimationFrame(() => {\n        if (navigationTicket !== navigationSequence || !section.classList.contains('active')) return;\n        const offset = $('.top-bar').getBoundingClientRect().height + 20;\n        const top = destination.getBoundingClientRect().top + window.scrollY - offset;\n        window.scrollTo({top: Math.max(0, top), behavior: 'instant'});\n      });\n      alignDestination();\n      if (document.fonts && document.fonts.ready) {\n        document.fonts.ready.then(alignDestination, alignDestination);\n      }\n    }";
+    html = replaceOnce(html, before, after, 'destination scrolling');
+  }
+  return html;
+}
+
+(function () {
+  'use strict';
+  const status = document.getElementById('status');
+  const retry = document.getElementById('retry');
+  const original = document.getElementById('original');
+  original.href = './index.html' + location.hash;
+  async function openGuide() {
+    retry.hidden = true;
+    retry.disabled = true;
+    status.textContent = 'Opening the study guide at your selected entry…';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    try {
+      const response = await fetch('./index.html', {cache: 'no-cache', credentials: 'same-origin', signal: controller.signal});
+      if (!response.ok) throw new Error('The guide is temporarily unavailable.');
+      const source = await response.text();
+      if (!/^\s*<!doctype html/i.test(source) || !source.includes('function navigateTo(')) {
+        throw new Error('The guide could not be opened.');
+      }
+      const repaired = repairReefsGuide(source);
+      clearTimeout(timeout);
+      document.open();
+      document.write(repaired);
+      document.close();
+    } catch (error) {
+      clearTimeout(timeout);
+      status.textContent = error.name === 'AbortError'
+        ? 'The guide took too long to load. Please try again or read the original guide.'
+        : 'The selected entry could not be opened. Please try again or read the original guide.';
+      retry.hidden = false;
+      retry.disabled = false;
+    }
+  }
+  retry.addEventListener('click', openGuide);
+  openGuide();
+})();
+</script>
+</body>
+</html>
